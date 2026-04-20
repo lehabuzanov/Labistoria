@@ -12,15 +12,39 @@
   --font-ui: "LabOldStandard", "Times New Roman", serif;
   --font-heading: "LabOranienbaum", "LabOldStandard", serif;
   --font-manuscript: "LabMonomakh", "LabNotoSerif", "Noto Serif", serif;
+  color-scheme: light;
 }
 
 html, body {
   font-family: var(--font-ui);
   color: var(--ink);
+  background: #f4ebd6;
 }
 
 body {
   background: #f4ebd6;
+}
+
+html,
+body,
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] *,
+section[data-testid="stMain"],
+section.main,
+[data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"] *,
+.stAlert,
+.stAlert *,
+.stTabs,
+.stTabs *,
+p,
+li,
+label,
+span,
+div {
+  color: var(--ink);
 }
 
 .stApp {
@@ -432,6 +456,10 @@ div[data-testid="stTabs"] button[role="tab"] {
   color: #5a3a20;
 }
 
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+  color: #4a2b18;
+}
+
 div[data-testid="stButton"] > button,
 div[data-testid="stDownloadButton"] > button {
   font-family: var(--font-heading);
@@ -450,6 +478,36 @@ div[data-testid="stDownloadButton"] > button:hover {
 
 label, .stSelectbox, .stMultiSelect, .stSlider, .stNumberInput, .stTextInput {
   font-family: var(--font-ui);
+}
+
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div,
+div[data-baseweb="textarea"] > div,
+div[data-baseweb="select"] span,
+div[data-baseweb="input"] input,
+div[data-baseweb="textarea"] textarea,
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea {
+  background: rgba(255, 251, 241, 0.96) !important;
+  color: var(--ink) !important;
+  -webkit-text-fill-color: var(--ink) !important;
+}
+
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] small,
+[data-testid="stSelectbox"] label,
+[data-testid="stMultiSelect"] label,
+[data-testid="stTextInput"] label,
+[data-testid="stNumberInput"] label,
+[data-testid="stRadio"] label,
+[data-testid="stCheckbox"] label {
+  color: var(--ink) !important;
+}
+
+::placeholder {
+  color: #7a6551 !important;
+  opacity: 1;
 }
 
 @media (max-width: 900px) {

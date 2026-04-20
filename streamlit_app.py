@@ -144,18 +144,20 @@ def render_document_cards(storage: RepositoryStorage) -> None:
         if doc["warnings"]:
             warnings = '<div class="catalog-warning">' + "<br>".join(html.escape(item) for item in doc["warnings"]) + "</div>"
         cards.append(
-            f"""
-            <article class="catalog-card">
-              <div class="catalog-topline">{html.escape(doc["display_name"])}</div>
-              <h3>{html.escape(doc["title"])}</h3>
-              <div class="catalog-meta">
-                <span>Листы: {html.escape(sheet_range_text(doc))}</span>
-                <span>Слов: {doc["word_count"]}</span>
-                <span>Кодировка: {html.escape(doc["actual_encoding"])}</span>
-              </div>
-              {warnings}
-            </article>
-            """
+            "".join(
+                [
+                    '<article class="catalog-card">',
+                    f'<div class="catalog-topline">{html.escape(doc["display_name"])}</div>',
+                    f"<h3>{html.escape(doc['title'])}</h3>",
+                    '<div class="catalog-meta">',
+                    f"<span>Листы: {html.escape(sheet_range_text(doc))}</span>",
+                    f"<span>Слов: {doc['word_count']}</span>",
+                    f"<span>Кодировка: {html.escape(doc['actual_encoding'])}</span>",
+                    "</div>",
+                    warnings,
+                    "</article>",
+                ]
+            )
         )
     st.markdown('<div class="catalog-grid">' + "".join(cards) + "</div>", unsafe_allow_html=True)
 
