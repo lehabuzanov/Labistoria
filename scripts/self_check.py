@@ -51,10 +51,10 @@ def assert_font_embedding() -> None:
     fallback_css = build_font_face("LabNotoSerif", "NotoSerif-Regular.ttf")
     ui_css = build_font_face("LabOldStandard", "OldStandard-Regular.ttf")
     heading_css = build_font_face("LabOranienbaum", "Oranienbaum-Regular.ttf")
-    assert "data:font/ttf;base64," in manuscript_css, "Monomakh не встраивается в CSS."
-    assert "data:font/ttf;base64," in fallback_css, "Noto Serif не встраивается в CSS."
-    assert "data:font/ttf;base64," in ui_css, "Old Standard не встраивается в CSS."
-    assert "data:font/ttf;base64," in heading_css, "Oranienbaum не встраивается в CSS."
+    assert 'raw.githubusercontent.com/lehabuzanov/Labistoria/main/assets/fonts/Monomakh-Regular.ttf' in manuscript_css, "Monomakh не подключается в CSS."
+    assert 'raw.githubusercontent.com/lehabuzanov/Labistoria/main/assets/fonts/NotoSerif-Regular.ttf' in fallback_css, "Noto Serif не подключается в CSS."
+    assert 'raw.githubusercontent.com/lehabuzanov/Labistoria/main/assets/fonts/OldStandard-Regular.ttf' in ui_css, "Old Standard не подключается в CSS."
+    assert 'raw.githubusercontent.com/lehabuzanov/Labistoria/main/assets/fonts/Oranienbaum-Regular.ttf' in heading_css, "Oranienbaum не подключается в CSS."
 
 
 def main() -> None:

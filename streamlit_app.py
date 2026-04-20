@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import html
 from pathlib import Path
 
@@ -13,6 +12,7 @@ from corpus_app.config import ASSETS_DIR, BASE_DIR
 
 
 REPOSITORY_URL = "https://github.com/lehabuzanov/Labistoria"
+RAW_BASE_URL = "https://raw.githubusercontent.com/lehabuzanov/Labistoria/main/assets/fonts"
 MANUSCRIPT_SAMPLE = "чл҃къ ꙗже ѣсть ꙗко ҃ ҇ ⷭ ⷮ ⷬ ⷯ ꙯ ⸱ №"
 UI_SAMPLE = "Параллельный корпус списков"
 
@@ -34,11 +34,11 @@ def build_font_face(name: str, file_name: str, *, weight: int = 400) -> str:
     font_path = ASSETS_DIR / "fonts" / file_name
     if not font_path.exists():
         return ""
-    encoded = base64.b64encode(font_path.read_bytes()).decode("ascii")
+    font_url = f"{RAW_BASE_URL}/{file_name}"
     return f"""
     @font-face {{
       font-family: "{name}";
-      src: url(data:font/ttf;base64,{encoded}) format("truetype");
+      src: url("{font_url}") format("truetype");
       font-weight: {weight};
       font-style: normal;
       font-display: swap;
