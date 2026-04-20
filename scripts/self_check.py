@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fontTools.ttLib import TTFont
+
 from corpus_app import AlignmentEngine, RepositoryStorage, export_alignment_to_tei
 from corpus_app.config import BASE_DIR
+from streamlit_app import MANUSCRIPT_SAMPLE, REPOSITORY_URL, UI_SAMPLE, build_font_face
 
 
 SOURCE_FILES = [
@@ -14,8 +17,58 @@ SOURCE_FILES = [
     "EPog_120-122_2.xml",
 ]
 
+FONT_FILES = {
+    "manuscript": BASE_DIR / "assets" / "fonts" / "Monomakh-Regular.ttf",
+    "manuscript_fallback": BASE_DIR / "assets" / "fonts" / "NotoSerif-Regular.ttf",
+    "ui_primary": BASE_DIR / "assets" / "fonts" / "OldStandard-Regular.ttf",
+    "ui_heading": BASE_DIR / "assets" / "fonts" / "Oranienbaum-Regular.ttf",
+}
+
+
+def font_cmap(font_path: Path) -> dict[int, str]:
+    font = TTFont(font_path)
+    return font.getBestCmap()
+
+
+def assert_font_has_chars(font_path: Path, sample_text: str) -> None:
+    cmap = font_cmap(font_path)
+    required = {ord(ch) for ch in sample_text if not ch.isspace()}
+    missing = [chr(code) for code in sorted(required) if code not in cmap]
+    assert not missing, f"Шрифт {font_path.name} не покрывает символы: {' '.join(missing)}"
+
+
+def assert_font_stack_has_chars(font_paths: list[Path], sample_text: str) -> None:
+    combined: dict[int, str] = {}
+    for font_path in font_paths:
+        combined.update(font_cmap(font_path))
+    required = {ord(ch) for ch in sample_text if not ch.isspace()}
+    missing = [chr(code) for code in sorted(required) if code not in combined]
+    assert not missing, f"Шрифтовый стек не покрывает символы: {' '.join(missing)}"
+
+
+def assert_font_embedding() -> None:
+    manuscript_css = build_font_face("LabMonomakh", "Monomakh-Regular.ttf")
+    fallback_css = build_font_face("LabNotoSerif", "NotoSerif-Regular.ttf")
+    ui_css = build_font_face("LabOldStandard", "OldStandard-Regular.ttf")
+    heading_css = build_font_face("LabOranienbaum", "Oranienbaum-Regular.ttf")
+    assert "data:font/ttf;base64," in manuscript_css, "Monomakh не встраивается в CSS."
+    assert "data:font/ttf;base64," in fallback_css, "Noto Serif не встраивается в CSS."
+    assert "data:font/ttf;base64," in ui_css, "Old Standard не встраивается в CSS."
+    assert "data:font/ttf;base64," in heading_css, "Oranienbaum не встраивается в CSS."
+
 
 def main() -> None:
+    for font_path in FONT_FILES.values():
+        assert font_path.exists(), f"Отсутствует файл шрифта: {font_path}"
+    assert_font_stack_has_chars(
+        [FONT_FILES["manuscript"], FONT_FILES["manuscript_fallback"]],
+        MANUSCRIPT_SAMPLE,
+    )
+    assert_font_has_chars(FONT_FILES["ui_primary"], UI_SAMPLE)
+    assert_font_has_chars(FONT_FILES["ui_heading"], UI_SAMPLE)
+    assert_font_embedding()
+    assert REPOSITORY_URL.startswith("https://github.com/"), "Ссылка на репозиторий не настроена."
+
     storage = RepositoryStorage()
     engine = AlignmentEngine(storage)
 
@@ -71,6 +124,7 @@ def main() -> None:
     assert len(docs_after) >= 5, "После сохранения документы пропали из хранилища."
 
     print("SELF_CHECK_OK")
+    print("FONT_CHECK_OK")
     print(f"documents={len(docs_after)}")
     print(f"rows={len(reloaded['rows'])}")
     print(f"export={export_path}")
@@ -78,4 +132,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
