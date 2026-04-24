@@ -118,7 +118,7 @@ class AlignmentEngine:
                 witness_words=witness_words,
             )
 
-        self._finalize_rows(rows)
+        self._finalize_rows(rows, master_doc_id=master_doc_id)
 
         alignment_id = new_id("alignment")
         now = now_iso()
@@ -144,7 +144,7 @@ class AlignmentEngine:
 
     def reclassify(self, state: dict[str, Any]) -> dict[str, Any]:
         cloned = copy.deepcopy(state)
-        self._finalize_rows(cloned["rows"])
+        self._finalize_rows(cloned["rows"], master_doc_id=cloned["master_doc_id"])
         return cloned
 
     def move_cell(self, state: dict[str, Any], *, row_index: int, document_id: str, delta: int) -> dict[str, Any]:
@@ -161,7 +161,7 @@ class AlignmentEngine:
         )
         rows[row_index]["manual"] = True
         rows[target_index]["manual"] = True
-        self._finalize_rows(rows)
+        self._finalize_rows(rows, master_doc_id=cloned["master_doc_id"])
         return cloned
 
     def insert_empty_row(self, state: dict[str, Any], *, row_index: int) -> dict[str, Any]:
@@ -178,7 +178,7 @@ class AlignmentEngine:
             "notes": "",
         }
         cloned["rows"].insert(row_index, new_row)
-        self._finalize_rows(cloned["rows"])
+        self._finalize_rows(cloned["rows"], master_doc_id=cloned["master_doc_id"])
         return cloned
 
     def delete_row_if_empty(self, state: dict[str, Any], *, row_index: int) -> dict[str, Any]:
@@ -200,7 +200,7 @@ class AlignmentEngine:
         rows[row_index]["cells"][document_id].extend(rows[row_index + 1]["cells"][document_id])
         rows[row_index + 1]["cells"][document_id] = []
         rows[row_index]["manual"] = True
-        self._finalize_rows(rows)
+        self._finalize_rows(rows, master_doc_id=cloned["master_doc_id"])
         return cloned
 
     def set_variant_type(self, state: dict[str, Any], *, row_index: int, variant_type: str) -> dict[str, Any]:
@@ -681,7 +681,7 @@ class AlignmentEngine:
             bits.append("в строке: " + ", ".join(summary))
         return "; ".join(bits)
 
-    def _analyze_row(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _analyze_row(self, row: dict[str, Any], *, master_doc_id: str | None = None) -> dict[str, Any]:
         populated = {doc_id: cell[0] for doc_id, cell in row["cells"].items() if cell}
         if len(populated) < 2:
             return {
@@ -690,6 +690,7 @@ class AlignmentEngine:
                 "variant_detail": "недостаточно чтений для сопоставления",
                 "relation_counts": {SYNTACTIC: 1},
                 "anchor_text": None,
+                "anchor_doc_id": None,
                 "state_label": "Недостаточно чтений",
             }
 
@@ -703,14 +704,18 @@ class AlignmentEngine:
                 "variant_detail": "Во всех выбранных списках чтение совпадает.",
                 "relation_counts": {},
                 "anchor_text": next(iter(populated.values())).get("text") or None,
+                "anchor_doc_id": next(iter(populated.keys())),
                 "state_label": "Совпадение",
             }
         anchor = self._choose_anchor(list(populated.values()))
+        anchor_doc_id = next((doc_id for doc_id, item in populated.items() if item is anchor), None)
+        reference_doc_id = master_doc_id if master_doc_id and master_doc_id in populated else anchor_doc_id
+        reference = populated.get(reference_doc_id) if reference_doc_id else anchor
         relation_counts: Counter[str] = Counter()
-        for item in populated.values():
-            if item is anchor:
+        for doc_id, item in populated.items():
+            if doc_id == reference_doc_id:
                 continue
-            pair_type = self._pair_variant_type(anchor, item)
+            pair_type = self._pair_variant_type(reference, item)
             if pair_type == MATCH:
                 continue
             relation_counts[pair_type] += 1
@@ -720,12 +725,10 @@ class AlignmentEngine:
         elif has_omission:
             relation_counts[SYNTACTIC] += 1
 
-        priority = [SYNTACTIC, LEXICAL, MORPHOLOGICAL, PHONETIC, GRAPHICAL]
-        primary = GRAPHICAL
-        for variant_type in priority:
-            if relation_counts.get(variant_type):
-                primary = variant_type
-                break
+        majority_order = [LEXICAL, MORPHOLOGICAL, PHONETIC, GRAPHICAL, SYNTACTIC]
+        max_count = max(relation_counts.values())
+        majority_types = [variant_type for variant_type, count in relation_counts.items() if count == max_count]
+        primary = next((variant_type for variant_type in majority_order if variant_type in majority_types), majority_types[0])
 
         if not relation_counts:
             return {
@@ -733,7 +736,8 @@ class AlignmentEngine:
                 "variant_auto_type": MATCH,
                 "variant_detail": "Во всех выбранных списках чтение совпадает.",
                 "relation_counts": {},
-                "anchor_text": anchor.get("text") or None,
+                "anchor_text": reference.get("text") or None,
+                "anchor_doc_id": reference_doc_id,
                 "state_label": "Совпадение",
             }
 
@@ -741,26 +745,28 @@ class AlignmentEngine:
             "variant_type": primary,
             "variant_auto_type": primary,
             "variant_detail": self._build_variant_detail(
-                anchor=anchor,
+                anchor=reference,
                 relation_counts=relation_counts,
                 has_omission=has_omission,
                 transposed=transposed,
             ),
             "relation_counts": dict(relation_counts),
-            "anchor_text": anchor.get("text") or None,
+            "anchor_text": reference.get("text") or None,
+            "anchor_doc_id": reference_doc_id,
             "state_label": "Разночтение",
         }
 
-    def _finalize_rows(self, rows: list[dict[str, Any]]) -> None:
+    def _finalize_rows(self, rows: list[dict[str, Any]], *, master_doc_id: str | None = None) -> None:
         for index, row in enumerate(rows, start=1):
             row["row_index"] = index
             for cell in row["cells"].values():
                 cell.sort(key=lambda item: item.get("token_id") or "")
-            analysis = self._analyze_row(row)
+            analysis = self._analyze_row(row, master_doc_id=master_doc_id)
             row["variant_auto_type"] = analysis["variant_auto_type"]
             row["variant_detail"] = analysis["variant_detail"]
             row["relation_counts"] = analysis["relation_counts"]
             row["anchor_text"] = analysis["anchor_text"]
+            row["anchor_doc_id"] = analysis["anchor_doc_id"]
             row["state_label"] = analysis["state_label"]
             if row.get("variant_source") != "manual":
                 row["variant_type"] = analysis["variant_type"]

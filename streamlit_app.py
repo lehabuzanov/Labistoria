@@ -344,7 +344,52 @@ def relation_chip_label(variant_type: str, count: int) -> str:
     return f"{labels.get(variant_type, variant_type)} × {count}"
 
 
-def render_variant_explanation(row: dict) -> str:
+def reference_doc_for_row(row: dict, master_doc_id: str) -> str | None:
+    master_cell = row["cells"].get(master_doc_id, [])
+    if master_cell:
+        return master_doc_id
+    return row.get("anchor_doc_id")
+
+
+def cell_relation_type(engine: AlignmentEngine, row: dict, doc_id: str, master_doc_id: str) -> str | None:
+    cell = row["cells"].get(doc_id, [])
+    reference_doc_id = reference_doc_for_row(row, master_doc_id)
+    if not reference_doc_id:
+        return None
+    reference_cell = row["cells"].get(reference_doc_id, [])
+    if doc_id == reference_doc_id:
+        return MATCH
+    if not cell and not reference_cell:
+        return MATCH
+    if not cell or not reference_cell:
+        return "синтаксическое"
+    return engine._pair_variant_type(reference_cell[0], cell[0])  # noqa: SLF001 - UI mirrors classifier logic
+
+
+def render_cell_html(engine: AlignmentEngine, row: dict, doc_id: str, master_doc_id: str) -> str:
+    cell = row["cells"].get(doc_id, [])
+    value = cell_text(cell)
+    title = cell_title(cell)
+    relation = cell_relation_type(engine, row, doc_id, master_doc_id)
+    dot_html = ""
+    if relation:
+        relation_class = variant_slug(relation)
+        dot_title = {
+            MATCH: "Совпадает с главным списком",
+            "графическое": "Графическое отличие от главного списка",
+            "фонетическое": "Фонетическое отличие от главного списка",
+            "морфологическое": "Морфологическое отличие от главного списка",
+            "синтаксическое": "Пропуск, вставка или перестановка относительно главного списка",
+            "лексическое": "Лексическое отличие от главного списка",
+        }.get(relation, relation)
+        dot_html = f'<div class="cell-marker marker-{relation_class}" title="{html.escape(dot_title)}"></div>'
+    return (
+        f'<td class="manuscript-cell" title="{html.escape(title)}">'
+        f'<div class="cell-reading manuscript">{html.escape(value)}</div>{dot_html}</td>'
+    )
+
+
+def render_variant_explanation(row: dict, master_doc_id: str) -> str:
     if row["variant_type"] == MATCH:
         return '<div class="variant-detail-line">Во всех выбранных списках чтение совпадает.</div>'
 
@@ -354,10 +399,12 @@ def render_variant_explanation(row: dict) -> str:
     elif row.get("relation_counts", {}).get("синтаксическое"):
         parts.append('<div class="variant-detail-line">Есть пропуски или вставки.</div>')
 
+    reference_doc_id = reference_doc_for_row(row, master_doc_id)
+    reference_label = "Главное чтение" if reference_doc_id == master_doc_id else "Опорное чтение"
     if row.get("anchor_text"):
         parts.append(
-            '<div class="variant-detail-line"><span class="variant-detail-label">Опорное чтение:</span> '
-            f'{html.escape(row["anchor_text"])}</div>'
+            f'<div class="variant-detail-line"><span class="variant-detail-label">{reference_label}:</span> '
+            f'<span class="variant-anchor manuscript">{html.escape(row["anchor_text"])}</span></div>'
         )
 
     relation_counts = row.get("relation_counts", {})
@@ -370,7 +417,7 @@ def render_variant_explanation(row: dict) -> str:
         )
         if chips:
             parts.append(
-                '<div class="variant-detail-line"><span class="variant-detail-label">В строке есть:</span></div>'
+                '<div class="variant-detail-line"><span class="variant-detail-label">Отличия от главного списка:</span></div>'
                 f'<div class="relation-chip-wrap">{chips}</div>'
             )
 
@@ -383,24 +430,28 @@ def render_variant_explanation(row: dict) -> str:
     return "".join(parts)
 
 
-def render_alignment_table(rows: list[dict], doc_map: dict[str, dict], visible_docs: list[str], *, table_id: str) -> None:
+def render_alignment_table(
+    rows: list[dict],
+    doc_map: dict[str, dict],
+    visible_docs: list[str],
+    *,
+    table_id: str,
+    engine: AlignmentEngine,
+    master_doc_id: str,
+) -> None:
     header_cells = ['<th class="index-col">№</th>', '<th class="type-col">Тип и разбор</th>']
     header_cells.extend(f"<th>{html.escape(doc_map[doc_id]['display_name'])}</th>" for doc_id in visible_docs)
 
     body_rows: list[str] = []
     for row in rows:
         variant_class = variant_slug(row["variant_type"])
-        detail_html = f'<div class="variant-detail">{render_variant_explanation(row)}</div>'
+        detail_html = f'<div class="variant-detail">{render_variant_explanation(row, master_doc_id)}</div>'
         cells = [
             f'<td class="index-col">{row["row_index"]}</td>',
             f'<td class="type-col"><span class="type-badge type-{variant_class}">{html.escape(variant_label(row["variant_type"]))}</span>{detail_html}</td>',
         ]
         for doc_id in visible_docs:
-            value = cell_text(row["cells"].get(doc_id, []))
-            title = cell_title(row["cells"].get(doc_id, []))
-            cells.append(
-                f'<td class="manuscript-cell manuscript" title="{html.escape(title)}">{html.escape(value)}</td>'
-            )
+            cells.append(render_cell_html(engine, row, doc_id, master_doc_id))
         row_attrs = ' data-transposed="true"' if row["flags"].get("transposed") else ""
         body_rows.append(f'<tr class="variant-row variant-{variant_class}"{row_attrs}>{"".join(cells)}</tr>')
 
@@ -444,11 +495,11 @@ def render_stats_cards(state: dict) -> None:
         card("Совпадения", str(matches), "Скрыты по умолчанию, чтобы не мешать просмотру разночтений")
 
 
-def render_row_context(state: dict, doc_map: dict[str, dict], focus_row: int, visible_docs: list[str]) -> None:
+def render_row_context(state: dict, doc_map: dict[str, dict], focus_row: int, visible_docs: list[str], engine: AlignmentEngine) -> None:
     start = max(1, focus_row - 3)
     end = min(len(state["rows"]), focus_row + 3)
     rows = filtered_rows(state, VARIANT_TYPES, (start, end), show_matches=True)
-    render_alignment_table(rows, doc_map, visible_docs, table_id="context-grid")
+    render_alignment_table(rows, doc_map, visible_docs, table_id="context-grid", engine=engine, master_doc_id=state["master_doc_id"])
 
 
 def move_document_order(state: dict, document_id: str, delta: int) -> dict:
@@ -497,6 +548,9 @@ def render_alignment_tab(storage: RepositoryStorage, engine: AlignmentEngine) ->
         index=list(alignment_options).index(default_label),
     )
     state = storage.load_alignment(alignment_options[selected_label])
+    if any("anchor_doc_id" not in row or "state_label" not in row for row in state["rows"]):
+        state = engine.reclassify(state)
+        storage.save_alignment(state)
     doc_map = load_document_name_map(storage)
 
     st.subheader("Рабочая сессия")
@@ -534,7 +588,8 @@ def render_alignment_tab(storage: RepositoryStorage, engine: AlignmentEngine) ->
           <div class="variant-guide-title">Как читать тип строки</div>
           <div class="variant-guide-text">
             Основной тип показывает главное расхождение в строке. Ниже указано опорное чтение и перечислены все типы,
-            которые реально встретились внутри этой строки. Совпадающие строки можно скрыть или показать отдельно.
+            которые реально встретились внутри этой строки. Под каждым словом показан цветной маркер: он сравнивает
+            это чтение с главным списком. Совпадающие строки можно скрыть или показать отдельно.
           </div>
         </div>
         """,
@@ -555,7 +610,7 @@ def render_alignment_tab(storage: RepositoryStorage, engine: AlignmentEngine) ->
         show_matches = st.checkbox("Показывать совпадения", value=False, help="Если включить, будут видны строки без разночтений.")
     row_span = st.slider("Диапазон строк", 1, max(1, len(state["rows"])), (1, min(120, len(state["rows"]))))
     rows = filtered_rows(state, variant_filter, row_span, show_matches=show_matches)
-    render_alignment_table(rows, doc_map, visible_docs, table_id="main-grid")
+    render_alignment_table(rows, doc_map, visible_docs, table_id="main-grid", engine=engine, master_doc_id=state["master_doc_id"])
 
     st.markdown("### Статистика разночтений")
     render_stats_cards(state)
@@ -568,7 +623,7 @@ def render_alignment_tab(storage: RepositoryStorage, engine: AlignmentEngine) ->
         value=min(row_span[0], len(state["rows"])),
         step=1,
     )
-    render_row_context(state, doc_map, focus_row, visible_docs)
+    render_row_context(state, doc_map, focus_row, visible_docs, engine)
 
     editable_docs = state["visible_document_order"]
     selected_doc = st.selectbox(

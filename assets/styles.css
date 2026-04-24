@@ -430,10 +430,11 @@ code {
 
 .variant-detail {
   margin-top: 0.42rem;
-  font-size: 0.82rem;
-  line-height: 1.28;
+  font-size: 0.9rem;
+  line-height: 1.38;
   color: var(--ink-soft);
   white-space: normal;
+  font-family: var(--font-ui);
 }
 
 .variant-detail-line {
@@ -443,6 +444,11 @@ code {
 .variant-detail-label {
   font-weight: 700;
   color: #55341d;
+}
+
+.variant-anchor {
+  font-size: 1rem;
+  color: #352113;
 }
 
 .relation-chip-wrap {
@@ -457,7 +463,7 @@ code {
   align-items: center;
   border-radius: 999px;
   padding: 0.14rem 0.48rem;
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   border: 1px solid transparent;
 }
 
@@ -529,6 +535,48 @@ code {
 
 .manuscript-cell {
   min-width: 8rem;
+}
+
+.cell-reading {
+  min-height: 1.9rem;
+}
+
+.cell-marker {
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+  margin-top: 0.38rem;
+  border: 1px solid transparent;
+}
+
+.marker-match {
+  background: rgba(102, 102, 102, 0.18);
+  border-color: rgba(102, 102, 102, 0.3);
+}
+
+.marker-graphical {
+  background: rgba(180, 135, 57, 0.74);
+  border-color: rgba(180, 135, 57, 0.95);
+}
+
+.marker-phonetic {
+  background: rgba(53, 84, 107, 0.74);
+  border-color: rgba(53, 84, 107, 0.95);
+}
+
+.marker-morphological {
+  background: rgba(90, 106, 59, 0.74);
+  border-color: rgba(90, 106, 59, 0.95);
+}
+
+.marker-syntactic {
+  background: rgba(143, 61, 46, 0.74);
+  border-color: rgba(143, 61, 46, 0.95);
+}
+
+.marker-lexical {
+  background: rgba(115, 68, 116, 0.74);
+  border-color: rgba(115, 68, 116, 0.95);
 }
 
 .help-card {
