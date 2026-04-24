@@ -326,9 +326,17 @@ def render_alignment_table(rows: list[dict], doc_map: dict[str, dict], visible_d
     body_rows: list[str] = []
     for row in rows:
         variant_class = variant_slug(row["variant_type"])
+        detail_bits: list[str] = []
+        if row.get("variant_detail"):
+            detail_bits.append(row["variant_detail"])
+        if row.get("variant_source") == "manual" and row.get("variant_auto_type") and row["variant_auto_type"] != row["variant_type"]:
+            detail_bits.append(f"авто: {row['variant_auto_type']}")
+        detail_html = ""
+        if detail_bits:
+            detail_html = f'<div class="variant-detail">{"<br>".join(html.escape(bit) for bit in detail_bits)}</div>'
         cells = [
             f'<td class="index-col">{row["row_index"]}</td>',
-            f'<td class="type-col"><span class="type-badge type-{variant_class}">{html.escape(row["variant_type"])}</span></td>',
+            f'<td class="type-col"><span class="type-badge type-{variant_class}">{html.escape(row["variant_type"])}</span>{detail_html}</td>',
         ]
         for doc_id in visible_docs:
             value = cell_text(row["cells"].get(doc_id, []))

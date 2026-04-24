@@ -52,8 +52,9 @@ def export_alignment_to_tei(*, storage, alignment_state: dict) -> str:
         app.set(f"{{{XML_NS}}}id", row["row_id"])
         app.set("ana", f"#{variant_slug(row['variant_type'])}")
         app.set("type", row["variant_type"])
-        if row.get("notes"):
-            app.set("n", row["notes"])
+        note_text = row.get("notes") or row.get("variant_detail")
+        if note_text:
+            app.set("n", note_text)
         for doc_id in doc_order:
             cell = row["cells"].get(doc_id, [])
             if not cell:
@@ -84,4 +85,3 @@ def variant_slug(value: str) -> str:
         LEXICAL: "lexical",
     }
     return mapping.get(value, "variant")
-

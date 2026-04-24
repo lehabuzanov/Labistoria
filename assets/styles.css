@@ -422,6 +422,14 @@ code {
   border-color: rgba(115, 68, 116, 0.22);
 }
 
+.variant-detail {
+  margin-top: 0.42rem;
+  font-size: 0.82rem;
+  line-height: 1.28;
+  color: var(--ink-soft);
+  white-space: normal;
+}
+
 .manuscript {
   font-family: var(--font-manuscript);
   font-size: 1.18rem;

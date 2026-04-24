@@ -5,6 +5,7 @@ from pathlib import Path
 from fontTools.ttLib import TTFont
 
 from corpus_app import AlignmentEngine, RepositoryStorage, export_alignment_to_tei
+from corpus_app.alignment import GRAPHICAL, LEXICAL, MORPHOLOGICAL, PHONETIC
 from corpus_app.config import BASE_DIR
 from streamlit_app import MANUSCRIPT_SAMPLE, REPOSITORY_URL, UI_SAMPLE, build_font_face
 
@@ -57,6 +58,63 @@ def assert_font_embedding() -> None:
     assert 'raw.githubusercontent.com/lehabuzanov/Labistoria/main/assets/fonts/Oranienbaum-Regular.ttf' in heading_css, "Oranienbaum не подключается в CSS."
 
 
+def assert_variant_classifier(engine: AlignmentEngine) -> None:
+    def token(
+        text: str,
+        *,
+        lemma: str | None = None,
+        features: dict | None = None,
+    ) -> dict:
+        return engine._word_ref(  # noqa: SLF001 - self-check intentionally verifies classifier internals
+            {
+                "token_id": text,
+                "text": text,
+                "lemma": lemma,
+                "features": features or {},
+            }
+        )
+
+    assert (
+        engine._pair_variant_type(  # noqa: SLF001
+            token("чл҃вкъ", lemma="человѣкъ", features={"category": "noun", "case": "nominative", "number": "singular"}),
+            token("чловѣкъ", lemma="человѣкъ", features={"category": "noun", "case": "genitive", "number": "plural"}),
+        )
+        == GRAPHICAL
+    ), "Титла и книжные сокращения должны считаться графическим разночтением."
+
+    assert (
+        engine._pair_variant_type(  # noqa: SLF001
+            token("вьсе", lemma="вьсь", features={"category": "pronoun", "case": "nominative"}),
+            token("въсе", lemma="вьсь", features={"category": "pronoun", "case": "nominative"}),
+        )
+        == PHONETIC
+    ), "Пары вроде вьсе/въсе должны считаться фонетическим разночтением."
+
+    assert (
+        engine._pair_variant_type(  # noqa: SLF001
+            token("оцю", lemma="отьць", features={"category": "noun", "case": "dative", "number": "singular"}),
+            token("оцеви", lemma=None, features={"category": "noun", "case": "dative", "number": "singular"}),
+        )
+        == MORPHOLOGICAL
+    ), "Формы вроде оцю/оцеви должны считаться морфологическим разночтением."
+
+    assert (
+        engine._pair_variant_type(  # noqa: SLF001
+            token("насытити", lemma="насытити", features={"category": "verb"}),
+            token("насытитися", lemma="насытитися", features={"category": "verb"}),
+        )
+        == MORPHOLOGICAL
+    ), "Рефлексивные пары должны считаться морфологическим разночтением."
+
+    assert (
+        engine._pair_variant_type(  # noqa: SLF001
+            token("ѥтеръ", lemma="ѥтеръ", features={"category": "pronoun"}),
+            token("нѣкто", lemma="нѣкто", features={"category": "pronoun"}),
+        )
+        == LEXICAL
+    ), "Разные леммы должны считаться лексическим разночтением."
+
+
 def main() -> None:
     for font_path in FONT_FILES.values():
         assert font_path.exists(), f"Отсутствует файл шрифта: {font_path}"
@@ -71,6 +129,7 @@ def main() -> None:
 
     storage = RepositoryStorage()
     engine = AlignmentEngine(storage)
+    assert_variant_classifier(engine)
 
     imported = []
     for file_name in SOURCE_FILES:
