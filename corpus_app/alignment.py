@@ -13,6 +13,7 @@ PHONETIC = "фонетическое"
 MORPHOLOGICAL = "морфологическое"
 SYNTACTIC = "синтаксическое"
 LEXICAL = "лексическое"
+MATCH = "совпадение"
 VARIANT_TYPES = [GRAPHICAL, PHONETIC, MORPHOLOGICAL, SYNTACTIC, LEXICAL]
 
 MORPH_FEATURE_KEYS = ("category", "case", "number", "gender", "person", "tense", "mood", "voice", "degree", "kind")
@@ -276,6 +277,9 @@ class AlignmentEngine:
 
     def _surface_form(self, item: dict[str, Any]) -> str:
         return (item.get("text") or item.get("lemma") or "").lower()
+
+    def _same_surface(self, left: dict[str, Any], right: dict[str, Any]) -> bool:
+        return bool(self._surface_form(left) and self._surface_form(left) == self._surface_form(right))
 
     def _graphic_key(self, text: str) -> str:
         value = "".join(ch for ch in (text or "").lower() if ch not in VISUAL_MARKS)
@@ -583,6 +587,8 @@ class AlignmentEngine:
         if not anchor or not item:
             return SYNTACTIC
 
+        if self._same_surface(anchor, item):
+            return MATCH
         same_graphic = anchor.get("graphic") == item.get("graphic") and anchor.get("graphic")
         same_broad = anchor.get("broad") == item.get("broad") and anchor.get("broad")
         same_phonetic = anchor.get("phonetic") == item.get("phonetic") and anchor.get("phonetic")
@@ -621,6 +627,7 @@ class AlignmentEngine:
 
     def _choose_anchor(self, readings: list[dict[str, Any]]) -> dict[str, Any]:
         penalties = {
+            MATCH: -0.2,
             GRAPHICAL: 0.0,
             PHONETIC: 1.2,
             MORPHOLOGICAL: 2.6,
@@ -653,14 +660,14 @@ class AlignmentEngine:
     ) -> str:
         bits: list[str] = []
         if transposed:
-            bits.append("есть перестановка")
+            bits.append("есть перестановка соседних слов")
         elif has_omission:
             bits.append("есть пропуски или вставки")
 
         if anchor:
             anchor_text = anchor.get("text") or anchor.get("lemma") or ""
             if anchor_text:
-                bits.append(f"база: {anchor_text}")
+                bits.append(f"опорное чтение: {anchor_text}")
 
         relation_labels = {
             GRAPHICAL: "графич.",
@@ -671,7 +678,7 @@ class AlignmentEngine:
         }
         summary = [f"{relation_labels[key]} {relation_counts[key]}" for key in VARIANT_TYPES if relation_counts.get(key)]
         if summary:
-            bits.append("к базе: " + ", ".join(summary))
+            bits.append("в строке: " + ", ".join(summary))
         return "; ".join(bits)
 
     def _analyze_row(self, row: dict[str, Any]) -> dict[str, Any]:
@@ -682,16 +689,31 @@ class AlignmentEngine:
                 "variant_auto_type": SYNTACTIC,
                 "variant_detail": "недостаточно чтений для сопоставления",
                 "relation_counts": {SYNTACTIC: 1},
+                "anchor_text": None,
+                "state_label": "Недостаточно чтений",
             }
 
         transposed = bool(row["flags"].get("transposed"))
         has_omission = any(not cell for cell in row["cells"].values())
+        surface_values = {self._surface_form(item) for item in populated.values()}
+        if len(surface_values) == 1 and not transposed and not has_omission:
+            return {
+                "variant_type": MATCH,
+                "variant_auto_type": MATCH,
+                "variant_detail": "Во всех выбранных списках чтение совпадает.",
+                "relation_counts": {},
+                "anchor_text": next(iter(populated.values())).get("text") or None,
+                "state_label": "Совпадение",
+            }
         anchor = self._choose_anchor(list(populated.values()))
         relation_counts: Counter[str] = Counter()
         for item in populated.values():
             if item is anchor:
                 continue
-            relation_counts[self._pair_variant_type(anchor, item)] += 1
+            pair_type = self._pair_variant_type(anchor, item)
+            if pair_type == MATCH:
+                continue
+            relation_counts[pair_type] += 1
 
         if transposed:
             relation_counts[SYNTACTIC] += 1
@@ -706,7 +728,14 @@ class AlignmentEngine:
                 break
 
         if not relation_counts:
-            relation_counts[GRAPHICAL] = 1
+            return {
+                "variant_type": MATCH,
+                "variant_auto_type": MATCH,
+                "variant_detail": "Во всех выбранных списках чтение совпадает.",
+                "relation_counts": {},
+                "anchor_text": anchor.get("text") or None,
+                "state_label": "Совпадение",
+            }
 
         return {
             "variant_type": primary,
@@ -718,6 +747,8 @@ class AlignmentEngine:
                 transposed=transposed,
             ),
             "relation_counts": dict(relation_counts),
+            "anchor_text": anchor.get("text") or None,
+            "state_label": "Разночтение",
         }
 
     def _finalize_rows(self, rows: list[dict[str, Any]]) -> None:
@@ -729,6 +760,8 @@ class AlignmentEngine:
             row["variant_auto_type"] = analysis["variant_auto_type"]
             row["variant_detail"] = analysis["variant_detail"]
             row["relation_counts"] = analysis["relation_counts"]
+            row["anchor_text"] = analysis["anchor_text"]
+            row["state_label"] = analysis["state_label"]
             if row.get("variant_source") != "manual":
                 row["variant_type"] = analysis["variant_type"]
                 row["variant_source"] = "automatic"

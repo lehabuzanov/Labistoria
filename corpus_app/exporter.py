@@ -3,7 +3,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
-from .alignment import GRAPHICAL, LEXICAL, MORPHOLOGICAL, PHONETIC, SYNTACTIC
+from .alignment import GRAPHICAL, LEXICAL, MATCH, MORPHOLOGICAL, PHONETIC, SYNTACTIC
 
 
 TEI_NS = "http://www.tei-c.org/ns/1.0"
@@ -35,7 +35,7 @@ def export_alignment_to_tei(*, storage, alignment_state: dict) -> str:
     encoding_desc = ET.SubElement(tei_header, f"{{{TEI_NS}}}encodingDesc")
     class_decl = ET.SubElement(encoding_desc, f"{{{TEI_NS}}}classDecl")
     taxonomy = ET.SubElement(class_decl, f"{{{TEI_NS}}}taxonomy")
-    for variant in [GRAPHICAL, PHONETIC, MORPHOLOGICAL, SYNTACTIC, LEXICAL]:
+    for variant in [MATCH, GRAPHICAL, PHONETIC, MORPHOLOGICAL, SYNTACTIC, LEXICAL]:
         category = ET.SubElement(taxonomy, f"{{{TEI_NS}}}category")
         category.set(f"{{{XML_NS}}}id", variant_slug(variant))
         ET.SubElement(category, f"{{{TEI_NS}}}catDesc").text = variant
@@ -78,6 +78,7 @@ def export_alignment_to_tei(*, storage, alignment_state: dict) -> str:
 
 def variant_slug(value: str) -> str:
     mapping = {
+        MATCH: "match",
         GRAPHICAL: "graphical",
         PHONETIC: "phonetic",
         MORPHOLOGICAL: "morphological",

@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from corpus_app import AlignmentEngine, RepositoryStorage, export_alignment_to_tei
-from corpus_app.alignment import VARIANT_TYPES
+from corpus_app.alignment import MATCH, VARIANT_TYPES
 from corpus_app.config import ASSETS_DIR, BASE_DIR
 
 
@@ -300,6 +300,7 @@ def cell_title(cell: list[dict]) -> str:
 
 def variant_slug(variant_type: str) -> str:
     return {
+        "совпадение": "match",
         "графическое": "graphical",
         "фонетическое": "phonetic",
         "морфологическое": "morphological",
@@ -307,11 +308,23 @@ def variant_slug(variant_type: str) -> str:
         "лексическое": "lexical",
     }.get(variant_type, "default")
 
+def variant_label(variant_type: str) -> str:
+    return {
+        MATCH: "Совпадение",
+        "графическое": "Графическое",
+        "фонетическое": "Фонетическое",
+        "морфологическое": "Морфологическое",
+        "синтаксическое": "Синтаксическое",
+        "лексическое": "Лексическое",
+    }.get(variant_type, variant_type)
 
-def filtered_rows(state: dict, variant_filter: list[str], row_span: tuple[int, int]) -> list[dict]:
+
+def filtered_rows(state: dict, variant_filter: list[str], row_span: tuple[int, int], *, show_matches: bool) -> list[dict]:
     output = []
     for row in state["rows"]:
-        if row["variant_type"] not in variant_filter:
+        if row["variant_type"] == MATCH and not show_matches:
+            continue
+        if row["variant_type"] != MATCH and row["variant_type"] not in variant_filter:
             continue
         if not (row_span[0] <= row["row_index"] <= row_span[1]):
             continue
@@ -319,24 +332,68 @@ def filtered_rows(state: dict, variant_filter: list[str], row_span: tuple[int, i
     return output
 
 
+def relation_chip_label(variant_type: str, count: int) -> str:
+    labels = {
+        MATCH: "совпадает",
+        "графическое": "графическое",
+        "фонетическое": "фонетическое",
+        "морфологическое": "морфологическое",
+        "синтаксическое": "синтаксическое",
+        "лексическое": "лексическое",
+    }
+    return f"{labels.get(variant_type, variant_type)} × {count}"
+
+
+def render_variant_explanation(row: dict) -> str:
+    if row["variant_type"] == MATCH:
+        return '<div class="variant-detail-line">Во всех выбранных списках чтение совпадает.</div>'
+
+    parts: list[str] = []
+    if row["flags"].get("transposed"):
+        parts.append('<div class="variant-detail-line">Есть перестановка соседних слов.</div>')
+    elif row.get("relation_counts", {}).get("синтаксическое"):
+        parts.append('<div class="variant-detail-line">Есть пропуски или вставки.</div>')
+
+    if row.get("anchor_text"):
+        parts.append(
+            '<div class="variant-detail-line"><span class="variant-detail-label">Опорное чтение:</span> '
+            f'{html.escape(row["anchor_text"])}</div>'
+        )
+
+    relation_counts = row.get("relation_counts", {})
+    if relation_counts:
+        chips = "".join(
+            f'<span class="relation-chip relation-{variant_slug(variant_type)}">{html.escape(relation_chip_label(variant_type, count))}</span>'
+            for variant_type in ["графическое", "фонетическое", "морфологическое", "синтаксическое", "лексическое"]
+            for count in [relation_counts.get(variant_type, 0)]
+            if count
+        )
+        if chips:
+            parts.append(
+                '<div class="variant-detail-line"><span class="variant-detail-label">В строке есть:</span></div>'
+                f'<div class="relation-chip-wrap">{chips}</div>'
+            )
+
+    if row.get("variant_source") == "manual" and row.get("variant_auto_type") and row["variant_auto_type"] != row["variant_type"]:
+        parts.append(
+            '<div class="variant-detail-line"><span class="variant-detail-label">Автоопределение:</span> '
+            f'{html.escape(variant_label(row["variant_auto_type"]))}</div>'
+        )
+
+    return "".join(parts)
+
+
 def render_alignment_table(rows: list[dict], doc_map: dict[str, dict], visible_docs: list[str], *, table_id: str) -> None:
-    header_cells = ['<th class="index-col">№</th>', '<th class="type-col">Тип</th>']
+    header_cells = ['<th class="index-col">№</th>', '<th class="type-col">Тип и разбор</th>']
     header_cells.extend(f"<th>{html.escape(doc_map[doc_id]['display_name'])}</th>" for doc_id in visible_docs)
 
     body_rows: list[str] = []
     for row in rows:
         variant_class = variant_slug(row["variant_type"])
-        detail_bits: list[str] = []
-        if row.get("variant_detail"):
-            detail_bits.append(row["variant_detail"])
-        if row.get("variant_source") == "manual" and row.get("variant_auto_type") and row["variant_auto_type"] != row["variant_type"]:
-            detail_bits.append(f"авто: {row['variant_auto_type']}")
-        detail_html = ""
-        if detail_bits:
-            detail_html = f'<div class="variant-detail">{"<br>".join(html.escape(bit) for bit in detail_bits)}</div>'
+        detail_html = f'<div class="variant-detail">{render_variant_explanation(row)}</div>'
         cells = [
             f'<td class="index-col">{row["row_index"]}</td>',
-            f'<td class="type-col"><span class="type-badge type-{variant_class}">{html.escape(row["variant_type"])}</span>{detail_html}</td>',
+            f'<td class="type-col"><span class="type-badge type-{variant_class}">{html.escape(variant_label(row["variant_type"]))}</span>{detail_html}</td>',
         ]
         for doc_id in visible_docs:
             value = cell_text(row["cells"].get(doc_id, []))
@@ -360,25 +417,37 @@ def render_alignment_table(rows: list[dict], doc_map: dict[str, dict], visible_d
 
 def stats_dataframe(state: dict) -> pd.DataFrame:
     counts = {variant: 0 for variant in VARIANT_TYPES}
+    matches = 0
     for row in state["rows"]:
+        if row["variant_type"] == MATCH:
+            matches += 1
+            continue
         counts[row["variant_type"]] = counts.get(row["variant_type"], 0) + 1
-    return pd.DataFrame([{"Тип": key, "Строк": value} for key, value in counts.items()])
+    data = [{"Тип": key, "Строк": value} for key, value in counts.items()]
+    data.append({"Тип": MATCH, "Строк": matches})
+    return pd.DataFrame(data)
 
 
 def render_stats_cards(state: dict) -> None:
     counts = {variant: 0 for variant in VARIANT_TYPES}
+    matches = 0
     for row in state["rows"]:
+        if row["variant_type"] == MATCH:
+            matches += 1
+            continue
         counts[row["variant_type"]] = counts.get(row["variant_type"], 0) + 1
-    cols = st.columns(len(VARIANT_TYPES))
-    for col, variant in zip(cols, VARIANT_TYPES):
+    cols = st.columns(len(VARIANT_TYPES) + 1)
+    for col, variant in zip(cols[:-1], VARIANT_TYPES):
         with col:
-            card(variant, str(counts[variant]))
+            card(variant_label(variant), str(counts[variant]))
+    with cols[-1]:
+        card("Совпадения", str(matches), "Скрыты по умолчанию, чтобы не мешать просмотру разночтений")
 
 
 def render_row_context(state: dict, doc_map: dict[str, dict], focus_row: int, visible_docs: list[str]) -> None:
     start = max(1, focus_row - 3)
     end = min(len(state["rows"]), focus_row + 3)
-    rows = filtered_rows(state, VARIANT_TYPES, (start, end))
+    rows = filtered_rows(state, VARIANT_TYPES, (start, end), show_matches=True)
     render_alignment_table(rows, doc_map, visible_docs, table_id="context-grid")
 
 
@@ -459,6 +528,18 @@ def render_alignment_tab(storage: RepositoryStorage, engine: AlignmentEngine) ->
         st.caption("Текущий порядок: " + order_text)
 
     st.markdown("### Фильтры просмотра")
+    st.markdown(
+        """
+        <div class="variant-guide">
+          <div class="variant-guide-title">Как читать тип строки</div>
+          <div class="variant-guide-text">
+            Основной тип показывает главное расхождение в строке. Ниже указано опорное чтение и перечислены все типы,
+            которые реально встретились внутри этой строки. Совпадающие строки можно скрыть или показать отдельно.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     visible_docs = st.multiselect(
         "Показывать списки",
         options=state["visible_document_order"],
@@ -467,9 +548,13 @@ def render_alignment_tab(storage: RepositoryStorage, engine: AlignmentEngine) ->
     )
     if not visible_docs:
         visible_docs = state["visible_document_order"]
-    variant_filter = st.multiselect("Показывать типы разночтений", VARIANT_TYPES, default=VARIANT_TYPES)
+    vf_col, match_col = st.columns([3, 1.3])
+    with vf_col:
+        variant_filter = st.multiselect("Показывать типы разночтений", VARIANT_TYPES, default=VARIANT_TYPES)
+    with match_col:
+        show_matches = st.checkbox("Показывать совпадения", value=False, help="Если включить, будут видны строки без разночтений.")
     row_span = st.slider("Диапазон строк", 1, max(1, len(state["rows"])), (1, min(120, len(state["rows"]))))
-    rows = filtered_rows(state, variant_filter, row_span)
+    rows = filtered_rows(state, variant_filter, row_span, show_matches=show_matches)
     render_alignment_table(rows, doc_map, visible_docs, table_id="main-grid")
 
     st.markdown("### Статистика разночтений")
@@ -515,10 +600,12 @@ def render_alignment_tab(storage: RepositoryStorage, engine: AlignmentEngine) ->
 
     c1, c2, c3 = st.columns([2, 1.5, 1.5])
     with c1:
+        editable_types = [MATCH] + VARIANT_TYPES
         manual_type = st.selectbox(
             "Исправить тип разночтения",
-            VARIANT_TYPES,
-            index=VARIANT_TYPES.index(state["rows"][focus_row - 1]["variant_type"]),
+            editable_types,
+            index=editable_types.index(state["rows"][focus_row - 1]["variant_type"]),
+            format_func=variant_label,
         )
     with c2:
         if st.button("Сохранить тип", use_container_width=True):

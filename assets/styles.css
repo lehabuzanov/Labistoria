@@ -370,8 +370,8 @@ code {
 }
 
 .alignment-grid .type-col {
-  width: 10rem;
-  min-width: 10rem;
+  width: 15rem;
+  min-width: 15rem;
 }
 
 .alignment-grid tbody tr:hover td {
@@ -422,12 +422,100 @@ code {
   border-color: rgba(115, 68, 116, 0.22);
 }
 
+.type-match {
+  background: rgba(102, 102, 102, 0.08);
+  color: #5d5d5d;
+  border-color: rgba(102, 102, 102, 0.18);
+}
+
 .variant-detail {
   margin-top: 0.42rem;
   font-size: 0.82rem;
   line-height: 1.28;
   color: var(--ink-soft);
   white-space: normal;
+}
+
+.variant-detail-line {
+  margin-top: 0.24rem;
+}
+
+.variant-detail-label {
+  font-weight: 700;
+  color: #55341d;
+}
+
+.relation-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.32rem;
+}
+
+.relation-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.14rem 0.48rem;
+  font-size: 0.76rem;
+  border: 1px solid transparent;
+}
+
+.relation-graphical {
+  background: rgba(180, 135, 57, 0.1);
+  color: #7b571f;
+  border-color: rgba(180, 135, 57, 0.22);
+}
+
+.relation-phonetic {
+  background: rgba(53, 84, 107, 0.1);
+  color: #2d5367;
+  border-color: rgba(53, 84, 107, 0.18);
+}
+
+.relation-morphological {
+  background: rgba(90, 106, 59, 0.1);
+  color: #4d6030;
+  border-color: rgba(90, 106, 59, 0.18);
+}
+
+.relation-syntactic {
+  background: rgba(143, 61, 46, 0.1);
+  color: #7c3528;
+  border-color: rgba(143, 61, 46, 0.18);
+}
+
+.relation-lexical {
+  background: rgba(115, 68, 116, 0.1);
+  color: #6b386e;
+  border-color: rgba(115, 68, 116, 0.18);
+}
+
+.relation-match {
+  background: rgba(102, 102, 102, 0.08);
+  color: #5d5d5d;
+  border-color: rgba(102, 102, 102, 0.18);
+}
+
+.variant-guide {
+  margin: 0.2rem 0 0.9rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(128, 94, 48, 0.16);
+  background: rgba(255, 251, 241, 0.82);
+  box-shadow: 0 10px 30px var(--paper-shadow);
+}
+
+.variant-guide-title {
+  font-family: var(--font-heading);
+  font-size: 1.08rem;
+  margin-bottom: 0.3rem;
+  color: #55341d;
+}
+
+.variant-guide-text {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
 }
 
 .manuscript {

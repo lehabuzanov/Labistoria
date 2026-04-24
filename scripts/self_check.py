@@ -5,7 +5,7 @@ from pathlib import Path
 from fontTools.ttLib import TTFont
 
 from corpus_app import AlignmentEngine, RepositoryStorage, export_alignment_to_tei
-from corpus_app.alignment import GRAPHICAL, LEXICAL, MORPHOLOGICAL, PHONETIC
+from corpus_app.alignment import GRAPHICAL, LEXICAL, MATCH, MORPHOLOGICAL, PHONETIC
 from corpus_app.config import BASE_DIR
 from streamlit_app import MANUSCRIPT_SAMPLE, REPOSITORY_URL, UI_SAMPLE, build_font_face
 
@@ -81,6 +81,14 @@ def assert_variant_classifier(engine: AlignmentEngine) -> None:
         )
         == GRAPHICAL
     ), "Титла и книжные сокращения должны считаться графическим разночтением."
+
+    assert (
+        engine._pair_variant_type(  # noqa: SLF001
+            token("и", lemma="и", features={"category": "conjunction"}),
+            token("и", lemma="и", features={"category": "conjunction"}),
+        )
+        == MATCH
+    ), "Полностью одинаковые чтения должны считаться совпадением, а не разночтением."
 
     assert (
         engine._pair_variant_type(  # noqa: SLF001
